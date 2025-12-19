@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>长航时无人机数字沙盘</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; }
+        
+        /* UI 界面层 */
+        #ui-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* 让鼠标穿透 UI 操作 3D */
+            padding: 20px;
+            box-sizing: border-box;
+            color: #00ffcc;
+        }
+
+        /* 标题栏 */
+        .header {
+            border-bottom: 2px solid #00ffcc;
+            display: inline-block;
+            padding-bottom: 10px;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        /* 左侧参数面板 */
+        .panel {
+            position: absolute;
+            top: 100px;
+            left: 20px;
+            width: 250px;
+            background: rgba(0, 20, 40, 0.7);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .data-row { margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .data-label { color: #aaa; }
+        .data-value { font-weight: bold; font-size: 1.1em; }
+
+        /* 加载提示 */
+        #loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: white; font-size: 24px; display: none;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-container">
+        <div class="header">
+            <h1>Long-Endurance UAV System</h1>
+            <small>Digital Twin Sandbox // Ver 1.0</small>
+        </div>
+
+        <div class="panel">
+            <h3>核心参数 (Core Data)</h3>
+            <div class="data-row"><span class="data-label">续航时间:</span> <span class="data-value">48 Hours</span></div>
+            <div class="data-row"><span class="data-label">巡航速度:</span> <span class="data-value">180 km/h</span></div>
+            <div class="data-row"><span class="data-label">最大升限:</span> <span class="data-value">8,000 m</span></div>
+            <div class="data-row"><span class="data-label">任务载荷:</span> <span class="data-value">EO/IR Pod</span></div>
+            <hr style="border-color: #004444;">
+            <div class="data-row"><span class="data-label">状态:</span> <span class="data-value" style="color:red;">巡航模拟中</span></div>
+        </div>
+    </div>
+    
+    <div id="loading">正在加载模型...</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+        // 1. 场景初始化
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510); // 深夜蓝背景
+        scene.fog = new THREE.Fog(0x050510, 20, 100); // 远处雾气
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(15, 10, 15);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // 2. 灯光设置
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0x00ffcc, 2); // 科技蓝光
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // 3. 创建写实地形 (Low Poly Mountains)
+        const geometry = new THREE.PlaneGeometry(200, 200, 40, 40);
+        const count = geometry.attributes.position.count;
+        const colors = [];
+        
+        // 随机调整顶点高度，制造山脉
+        for (let i = 0; i < count; i++) {
+            const z = geometry.attributes.position.getZ(i);
+            // 简单的随机噪声生成地形
+            const height = Math.random() * 8; 
+            geometry.attributes.position.setZ(i, z + height);
+        }
+        geometry.computeVertexNormals();
+
+        const terrainMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a1a1a,
+            wireframe: true, // 网格线风格，更有科技感
+            roughness: 0.8
+        });
+        
+        const terrain = new THREE.Mesh(geometry, terrainMaterial);
+        terrain.rotation.x = -Math.PI / 2; // 放平
+        terrain.position.y = -10; // 放在下方
+        scene.add(terrain);
+
+        // 4. 无人机模型加载部分
+        let droneMesh;
+        const loader = new STLLoader();
+        const material = new THREE.MeshPhysicalMaterial({
+            color: 0xaaaaaa,
+            metalness: 0.8,
+            roughness: 0.2,
+            clearcoat: 1.0
+        });
+
+        // --- 核心修改区：如何加载你的模型 ---
+        // 如果无法加载本地文件，它会报错。你需要用 Live Server 运行。
+        
+        // 尝试加载 'drone.stl'
+        loader.load('./drone.stl', function (geometry) {
+            geometry.center(); // 自动居中
+            droneMesh = new THREE.Mesh(geometry, material);
+            
+            // 这里可能需要根据你的模型尺寸调整缩放
+            droneMesh.scale.set(0.01, 0.01, 0.01); 
+            droneMesh.rotation.x = 2*Math.PI ; // 很多 STL 默认是立着的，需要放平
+
+            scene.add(droneMesh);
+            console.log("模型加载成功");
+        }, undefined, function (error) {
+            // 如果加载失败（或文件不存在），生成一个替代的几何体飞机
+            console.log("未找到模型或跨域限制，使用替代模型");
+            const tempGeo = new THREE.ConeGeometry(2, 8, 32);
+            droneMesh = new THREE.Mesh(tempGeo, material);
+            droneMesh.rotation.z = -Math.PI / 2;
+            scene.add(droneMesh);
+        });
+
+        // 5. 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 无人机微动（模拟气流震动）
+            if (droneMesh) {
+                droneMesh.position.y = Math.sin(Date.now() * 0.002) * 0.5;
+                droneMesh.rotation.z = Math.sin(Date.now() * 0.001) * 0.05;
+            }
+
+            // 地形向后移动（模拟飞行）
+            terrain.position.z += 0.1;
+            if (terrain.position.z > 10) {
+                terrain.position.z = 0; // 循环复位
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 窗口自适应
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
