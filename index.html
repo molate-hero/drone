@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>长航时无人机数字沙盘 - 完整仿真版</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Consolas', 'Courier New', monospace; }
+        body { margin: 0; overflow: hidden; background-color: #08d4f4; font-family: 'Consolas', 'Courier New', monospace; }
         
         /* UI 容器 */
         #ui-container {
@@ -253,7 +253,7 @@
 
         // 场景搭建
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050510);
+        scene.background = new THREE.Color(0x1a1a20);
         scene.fog = new THREE.Fog(0x050510, 20, 150);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -293,7 +293,7 @@
         geometry.computeVertexNormals();
 
         const terrainMaterial = new THREE.MeshStandardMaterial({
-            color: 0x0a1a2a, emissive: 0x001122, wireframe: true, transparent: true, opacity: 0.3
+            color: 0x0000ff, emissive: 0x00ff00, wireframe: true, transparent: true, opacity: 0.3
         });
         const terrain = new THREE.Mesh(geometry, terrainMaterial);
         terrain.rotation.x = -Math.PI / 2;
