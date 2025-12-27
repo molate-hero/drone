@@ -2,50 +2,90 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>长航时无人机数字沙盘</title>
+    <title>长航时无人机数字沙盘 - 完整仿真版</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Consolas', 'Courier New', monospace; }
         
-        /* UI 界面层 */
+        /* UI 容器 */
         #ui-container {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; /* 让鼠标穿透 UI 操作 3D */
+            pointer-events: none;
             padding: 20px;
             box-sizing: border-box;
             color: #00ffcc;
         }
 
-        /* 标题栏 */
-        .header {
-            border-bottom: 2px solid #00ffcc;
-            display: inline-block;
-            padding-bottom: 10px;
-            background: rgba(0, 0, 0, 0.5);
+        /* 顶部状态栏 (HUD) - 新增需求 */
+        .hud-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(40, 0, 0, 0.6); /* 警示色底 */
+            border: 1px solid #ff3333;
+            padding: 15px;
+            border-radius: 4px;
+            pointer-events: auto;
+            min-width: 250px;
+            box-shadow: 0 0 10px rgba(255, 50, 50, 0.3);
+            background: linear-gradient(180deg, rgba(20,0,0,0.8) 0%, rgba(40,0,0,0.6) 100%);
         }
+
+        .hud-title {
+            color: #ff3333;
+            font-weight: bold;
+            border-bottom: 1px solid #ff3333;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .hud-row { margin-bottom: 8px; font-size: 14px; display: flex; justify-content: space-between; }
+        .hud-val { font-weight: bold; color: #fff; }
+        .hud-alert { color: red; font-weight: bold; animation: blink 1s infinite; display: none; text-align: center;}
+
+        @keyframes blink { 50% { opacity: 0; } }
 
         /* 左侧参数面板 */
         .panel {
             position: absolute;
-            top: 100px;
+            top: 200px; /* 下移一点，避开HUD */
             left: 20px;
-            width: 250px;
-            background: rgba(0, 20, 40, 0.7);
+            width: 300px;
+            background: rgba(0, 20, 40, 0.85);
             border: 1px solid #00ffcc;
-            padding: 15px;
+            padding: 20px;
             border-radius: 5px;
+            pointer-events: auto;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
         }
 
-        .data-row { margin-bottom: 10px; display: flex; justify-content: space-between; }
-        .data-label { color: #aaa; }
-        .data-value { font-weight: bold; font-size: 1.1em; }
+        h3 { margin-top: 0; color: #fff; border-bottom: 1px solid #004444; padding-bottom: 5px; }
 
-        /* 加载提示 */
+        .control-group { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .control-group label { font-size: 12px; color: #aaa; }
+        .control-group input[type="number"] {
+            width: 80px; background: rgba(0, 0, 0, 0.5); border: 1px solid #004444; color: #00ffcc; padding: 3px; text-align: right;
+        }
+        .control-group input[type="range"] { width: 90px; }
+        .control-group input:focus { outline: none; border-color: #00ffcc; }
+
+        .result-box {
+            margin-top: 15px; padding: 10px; background: rgba(0, 40, 60, 0.8);
+            border: 1px dashed #00ffcc; text-align: center;
+        }
+        .result-value { font-size: 24px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #00ffcc; }
+        .result-label { font-size: 12px; color: #aaa; display: block;}
+
         #loading {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; font-size: 24px; display: none;
         }
+        
+        /* 简单的进度条 */
+        .progress-bar { width: 100%; height: 6px; background: #333; margin-top: 5px; position: relative;}
+        .progress-fill { height: 100%; background: #00ffcc; width: 100%; transition: width 0.1s; }
     </style>
     <script type="importmap">
         {
@@ -59,36 +99,165 @@
 <body>
 
     <div id="ui-container">
-        <div class="header">
-            <h1>Long-Endurance UAV System</h1>
-            <small>Digital Twin Sandbox // Ver 1.0</small>
+        <div class="hud-panel">
+            <div class="hud-title">
+                <span>FLIGHT STATUS</span>
+                <span style="font-size:0.8em; color:#aaa;">x500 Speed</span>
+            </div>
+            
+            <div class="hud-row">
+                <span>已飞时间 (Elapsed):</span>
+                <span id="hud-elapsed" class="hud-val">00:00:00</span>
+            </div>
+            <div class="hud-row">
+                <span>剩余燃油 (Fuel):</span>
+                <span id="hud-fuel" class="hud-val">-- kg</span>
+            </div>
+            <div class="progress-bar">
+                <div id="hud-fuel-bar" class="progress-fill"></div>
+            </div>
+            <div class="hud-row" style="margin-top:8px;">
+                <span>预计剩余 (Rem. Time):</span>
+                <span id="hud-rem-time" class="hud-val">-- h</span>
+            </div>
+            
+            <div id="hud-alert" class="hud-alert">⚠ FUEL EMPTY - RTB ⚠</div>
+            <button onclick="resetFlight()" style="margin-top:10px; width:100%; background:#300; color:#f88; border:1px solid #500; cursor:pointer;">重置飞行 (Reset)</button>
         </div>
 
         <div class="panel">
-            <h3>核心参数 (Core Data)</h3>
-            <div class="data-row"><span class="data-label">续航时间:</span> <span class="data-value">48 Hours</span></div>
-            <div class="data-row"><span class="data-label">巡航速度:</span> <span class="data-value">180 km/h</span></div>
-            <div class="data-row"><span class="data-label">最大升限:</span> <span class="data-value">8,000 m</span></div>
-            <div class="data-row"><span class="data-label">任务载荷:</span> <span class="data-value">EO/IR Pod</span></div>
+            <h3>设计参数 (Input)</h3>
+            <small style="color:gray; display:block; margin-bottom:10px;">调整参数会自动重置飞行状态</small>
+
+            <div class="control-group">
+                <label>MTOW (kg):</label>
+                <input type="number" id="inp-mtow" value="1200" step="10">
+            </div>
+            <div class="control-group">
+                <label>能源质量 (kg):</label>
+                <input type="number" id="inp-fuel" value="400" step="10">
+            </div>
+            <div class="control-group">
+                <label>升阻比 (L/D):</label>
+                <input type="number" id="inp-ld" value="22" step="0.5">
+            </div>
+            <div class="control-group">
+                <label>效率因子:</label>
+                <input type="range" id="inp-eff" min="0.1" max="2.0" step="0.1" value="1.0">
+            </div>
+
             <hr style="border-color: #004444;">
-            <div class="data-row"><span class="data-label">状态:</span> <span class="data-value" style="color:red;">巡航模拟中</span></div>
+
+            <h3>性能推演</h3>
+            <div class="control-group">
+                <label>巡航速度 (km/h):</label>
+                <span id="out-speed">180</span>
+            </div>
+            <div class="control-group">
+                <label>燃油占比:</label>
+                <span id="out-ratio">33%</span>
+            </div>
+            <div class="result-box">
+                <span class="result-label">理论最大续航</span>
+                <span id="out-time" class="result-value">-- h</span>
+            </div>
         </div>
     </div>
     
     <div id="loading">正在加载模型...</div>
+
+    <script>
+        // 定义全局变量，用于让 THREE.js 模块读取
+        window.simState = {
+            speedKmH: 0,        // 当前巡航速度
+            terrainSpeed: 0,    // 地形移动速度 (计算得出)
+            totalEnduranceH: 0, // 总续航小时
+            isFlying: true,     // 飞行状态
+            currentFuel: 0,     // 当前剩余油量
+            maxFuel: 0,         // 初始油量
+            simElapsedTime: 0   // 模拟已过时间 (秒)
+        };
+
+        const TIME_SCALE = 500; // 时间加速倍率：1秒真实时间 = 500秒模拟时间
+
+        // UI 元素
+        const elMtow = document.getElementById('inp-mtow');
+        const elFuel = document.getElementById('inp-fuel');
+        const elLd = document.getElementById('inp-ld');
+        const elEff = document.getElementById('inp-eff');
+        
+        const outTime = document.getElementById('out-time');
+        const outSpeed = document.getElementById('out-speed');
+        const outRatio = document.getElementById('out-ratio');
+
+        // 计算物理参数
+        function calculatePhysics() {
+            const mtow = parseFloat(elMtow.value);
+            const fuel = parseFloat(elFuel.value);
+            const ld = parseFloat(elLd.value);
+            const effFactor = parseFloat(elEff.value);
+
+            if(fuel >= mtow) {
+                outTime.innerText = "Error";
+                return;
+            }
+
+            // 1. 计算理论续航 (Breguet)
+            const w_final = mtow - fuel;
+            const endurance = 20 * effFactor * ld * Math.log(mtow / w_final);
+            
+            // 2. 计算速度 (简单模型：重量越大，为了维持升力速度越快)
+            const baseSpeed = 160; 
+            const speed = baseSpeed * Math.sqrt(mtow / 1000);
+
+            // 更新 UI
+            outTime.innerText = endurance.toFixed(1) + " h";
+            outSpeed.innerText = speed.toFixed(0);
+            outRatio.innerText = ((fuel/mtow)*100).toFixed(1) + "%";
+
+            // 更新全局状态 (重置飞行)
+            resetFlightData(speed, endurance, fuel);
+        }
+
+        function resetFlightData(speed, endurance, fuel) {
+            window.simState.speedKmH = speed;
+            window.simState.totalEnduranceH = endurance;
+            window.simState.maxFuel = fuel;
+            window.simState.currentFuel = fuel;
+            window.simState.simElapsedTime = 0;
+            window.simState.isFlying = true;
+            
+            // 核心：根据飞机速度映射地形移动速度
+            // 假设 180km/h 对应 0.2 的地形移动速度
+            window.simState.terrainSpeed = (speed / 180) * 0.2;
+
+            document.getElementById('hud-alert').style.display = 'none';
+        }
+
+        // 全局重置按钮调用
+        window.resetFlight = calculatePhysics;
+
+        // 绑定输入事件
+        [elMtow, elFuel, elLd, elEff].forEach(el => {
+            el.addEventListener('input', calculatePhysics);
+        });
+
+        // 初始化
+        calculatePhysics();
+    </script>
 
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
-        // 1. 场景初始化
+        // 场景搭建
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050510); // 深夜蓝背景
-        scene.fog = new THREE.Fog(0x050510, 20, 100); // 远处雾气
+        scene.background = new THREE.Color(0x050510);
+        scene.fog = new THREE.Fog(0x050510, 20, 150);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(15, 10, 15);
+        camera.position.set(15, 5, 15); // 稍微降低一点视角，显得更壮观
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -96,86 +265,142 @@
 
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
+        
+        // --- 修改点 1: 解锁视角限制 ---
+        // 允许用户查看飞机腹部
+        controls.maxPolarAngle = Math.PI; 
+        controls.minDistance = 5;
+        controls.maxDistance = 50;
 
-        // 2. 灯光设置
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        // 灯光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
         scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0x00ffcc, 2); // 科技蓝光
+        const dirLight = new THREE.DirectionalLight(0xf5f5f5, 1.5);
         dirLight.position.set(10, 20, 10);
         scene.add(dirLight);
+        const bottomLight = new THREE.DirectionalLight(0x333333, 0.8); // 底部加点橙光，方便看清腹部细节
+        bottomLight.position.set(0, -10, 0);
+        scene.add(bottomLight);
 
-        // 3. 创建写实地形 (Low Poly Mountains)
-        const geometry = new THREE.PlaneGeometry(200, 200, 40, 40);
+        // 地形
+        const geometry = new THREE.PlaneGeometry(400, 400, 50, 50);
         const count = geometry.attributes.position.count;
-        const colors = [];
-        
-        // 随机调整顶点高度，制造山脉
         for (let i = 0; i < count; i++) {
             const z = geometry.attributes.position.getZ(i);
-            // 简单的随机噪声生成地形
-            const height = Math.random() * 8; 
+            const height = Math.random() * 4 + Math.sin(i*0.2)*3; 
             geometry.attributes.position.setZ(i, z + height);
         }
         geometry.computeVertexNormals();
 
         const terrainMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1a1a1a,
-            wireframe: true, // 网格线风格，更有科技感
-            roughness: 0.8
+            color: 0x0a1a2a, emissive: 0x001122, wireframe: true, transparent: true, opacity: 0.3
         });
-        
         const terrain = new THREE.Mesh(geometry, terrainMaterial);
-        terrain.rotation.x = -Math.PI / 2; // 放平
-        terrain.position.y = -10; // 放在下方
+        terrain.rotation.x = -Math.PI / 2;
+        terrain.position.y = -15;
         scene.add(terrain);
 
-        // 4. 无人机模型加载部分
+        // 模型加载
         let droneMesh;
         const loader = new STLLoader();
         const material = new THREE.MeshPhysicalMaterial({
-            color: 0xaaaaaa,
-            metalness: 0.8,
-            roughness: 0.2,
-            clearcoat: 1.0
+            color: 0x8899aa, metalness: 0.9, roughness: 0.4, clearcoat: 1.0
         });
 
-        // --- 核心修改区：如何加载你的模型 ---
-        // 如果无法加载本地文件，它会报错。你需要用 Live Server 运行。
-        
-        // 尝试加载 'drone.stl'
         loader.load('./drone.stl', function (geometry) {
-            geometry.center(); // 自动居中
+            geometry.center();
             droneMesh = new THREE.Mesh(geometry, material);
-            
-            // 这里可能需要根据你的模型尺寸调整缩放
             droneMesh.scale.set(0.01, 0.01, 0.01); 
-            droneMesh.rotation.x = 2*Math.PI ; // 很多 STL 默认是立着的，需要放平
-
+            droneMesh.rotation.x = 0; 
             scene.add(droneMesh);
-            console.log("模型加载成功");
         }, undefined, function (error) {
-            // 如果加载失败（或文件不存在），生成一个替代的几何体飞机
-            console.log("未找到模型或跨域限制，使用替代模型");
-            const tempGeo = new THREE.ConeGeometry(2, 8, 32);
-            droneMesh = new THREE.Mesh(tempGeo, material);
-            droneMesh.rotation.z = -Math.PI / 2;
+            // 替代模型
+            const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1, 10, 4, 16), material);
+            const wings = new THREE.Mesh(new THREE.BoxGeometry(18, 0.2, 2), material);
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 1.5), material);
+            fuselage.rotation.z = Math.PI / 2;
+            tail.position.x = -4.5;
+            droneMesh = new THREE.Group();
+            droneMesh.add(fuselage);
+            droneMesh.add(wings);
+            droneMesh.add(tail);
             scene.add(droneMesh);
         });
 
-        // 5. 动画循环
+        // 动画与逻辑循环
+        const clock = new THREE.Clock();
+        const TIME_SCALE = 500; // 与全局保持一致的倍率说明
+
+        function updateHUD(dt) {
+            if (!window.simState.isFlying) return;
+
+            // 1. 计算模拟时间的流逝
+            // dt 是上一帧到这一帧的真实秒数
+            const simDelta = dt * TIME_SCALE; 
+            window.simState.simElapsedTime += simDelta;
+
+            // 2. 计算燃油消耗
+            // 燃油消耗率 (kg/s) = 总油量 / (总续航小时 * 3600)
+            const burnRate = window.simState.maxFuel / (window.simState.totalEnduranceH * 3600);
+            const burned = burnRate * simDelta;
+            
+            window.simState.currentFuel -= burned;
+
+            // 3. 检查是否燃油耗尽
+            if (window.simState.currentFuel <= 0) {
+                window.simState.currentFuel = 0;
+                window.simState.isFlying = false;
+                document.getElementById('hud-alert').style.display = 'block';
+            }
+
+            // 4. 更新 DOM
+            // 格式化时间 HH:MM:SS
+            const totalSeconds = Math.floor(window.simState.simElapsedTime);
+            const hrs = Math.floor(totalSeconds / 3600);
+            const mins = Math.floor((totalSeconds % 3600) / 60);
+            const secs = totalSeconds % 60;
+            document.getElementById('hud-elapsed').innerText = 
+                `${hrs.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+
+            document.getElementById('hud-fuel').innerText = window.simState.currentFuel.toFixed(1) + " kg";
+            
+            // 剩余时间
+            const remSeconds = (window.simState.currentFuel / burnRate);
+            const remHrs = remSeconds / 3600;
+            document.getElementById('hud-rem-time').innerText = remHrs.toFixed(2) + " h";
+
+            // 进度条
+            const pct = (window.simState.currentFuel / window.simState.maxFuel) * 100;
+            const bar = document.getElementById('hud-fuel-bar');
+            bar.style.width = pct + "%";
+            // 颜色变化：充足(绿) -> 警告(黄) -> 危险(红)
+            if(pct < 20) bar.style.background = "#ff3333";
+            else if(pct < 50) bar.style.background = "#ffcc00";
+            else bar.style.background = "#00ffcc";
+        }
+
         function animate() {
             requestAnimationFrame(animate);
             
-            // 无人机微动（模拟气流震动）
+            const dt = clock.getDelta(); // 获取两帧之间的时间间隔(秒)
+
+            // 更新 HUD 和 燃油逻辑
+            updateHUD(dt);
+
+            // 3D 动画部分
             if (droneMesh) {
-                droneMesh.position.y = Math.sin(Date.now() * 0.002) * 0.5;
-                droneMesh.rotation.z = Math.sin(Date.now() * 0.001) * 0.05;
+                const time = Date.now() * 0.001;
+                droneMesh.position.y = Math.sin(time) * 0.2; 
+                // 模拟飞行姿态微动
+                droneMesh.rotation.z = Math.sin(time * 0.5) * 0.05; 
             }
 
-            // 地形向后移动（模拟飞行）
-            terrain.position.z += 0.1;
-            if (terrain.position.z > 10) {
-                terrain.position.z = 0; // 循环复位
+            // --- 修改点 2: 速度联动 ---
+            // 如果还在飞，地形移动。如果没油了，停止移动。
+            if (window.simState.isFlying) {
+                // 使用全局计算出的 terrainSpeed
+                terrain.position.z += window.simState.terrainSpeed;
+                if (terrain.position.z > 20) terrain.position.z = 0;
             }
 
             controls.update();
@@ -183,7 +408,6 @@
         }
         animate();
 
-        // 窗口自适应
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
